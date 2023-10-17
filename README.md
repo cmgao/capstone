@@ -4,7 +4,7 @@
 
 ## steps to reproduce
 
-1. 1. Log in: Greene’s login node.
+1. Log in: Greene’s login node.
 	ssh greene
 2. Log in to Burst node
 	- ssh burst
