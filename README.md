@@ -5,7 +5,7 @@
 ## steps to reproduce
 
 1. Log in: Greene’s login node.
-	ssh greene
+	- ssh greene
 2. Log in to Burst node
 	- ssh burst
 3. Request a job / computational resource and wait until Slurm grants it.
