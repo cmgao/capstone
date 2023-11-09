@@ -26,6 +26,7 @@ import pickle
 nclass_dict = {'I32': 1000, 'I64': 1000, 'I128': 1000, 
                'CIFAR10': 10, 'CIFAR100': 100, 'CA': 8, 'ImageNet':1000,
                'FFHQ': 10, 'FFHQ64': 10, 'FFHQ128': 10,
+               'MNIST':100, 'MedMNIST': 100
                }
 # Parse input arguments
 parser = inversefed.options()
@@ -59,8 +60,8 @@ if __name__ == "__main__":
 
     # Get data:
     loss_fn, trainloader, validloader = inversefed.construct_dataloaders(args.dataset, defs, data_path=args.data_path)
-
-    model, model_seed = inversefed.construct_model(args.model, num_classes=nclass_dict[args.dataset], num_channels=3, seed=0)
+    # import pudb; pudb.set_trace()
+    model, model_seed = inversefed.construct_model(args.model, num_classes=nclass_dict[args.dataset], num_channels=1, seed=0)
     if args.dataset.startswith('FFHQ'):
         dm = torch.as_tensor(getattr(inversefed.consts, f'cifar10_mean'), **setup)[:, None, None]
         ds = torch.as_tensor(getattr(inversefed.consts, f'cifar10_std'), **setup)[:, None, None]
@@ -239,6 +240,7 @@ if __name__ == "__main__":
                 if (label not in labels):
                     print("loaded img %d" % (target_id_ - 1))
                     labels.append(torch.as_tensor((label,), device=setup['device']))
+
                     ground_truth.append(img.to(**setup))
                     tid_list.append(target_id_ - 1)
 
@@ -257,9 +259,12 @@ if __name__ == "__main__":
 
 
         if args.accumulation == 0:
-            target_loss, _, _ = loss_fn(model(ground_truth), labels)
+            # import pudb; pudb.set_trace()
+            pred = model(ground_truth)#.argmax(dim=1).unsqueeze(1).float()
+            labels = labels.flatten()
+            target_loss, _, _ = loss_fn(pred, labels)
             input_gradient = torch.autograd.grad(target_loss, model.parameters())
-            input_gradient = [grad.detach() for grad in input_gradient]
+            input_gradient = [grad.detach().clone() for grad in input_gradient]
 
             bn_prior = []
             if args.bn_stat > 0:
@@ -272,7 +277,7 @@ if __name__ == "__main__":
 
             if G is None:
                 G = rec_machine.G
-
+            # import pudb; pudb.set_trace()
             output, stats = rec_machine.reconstruct(input_gradient, labels, img_shape=img_shape, dryrun=args.dryrun)
 
         else:

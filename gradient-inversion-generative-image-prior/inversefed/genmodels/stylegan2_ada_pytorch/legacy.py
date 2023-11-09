@@ -20,6 +20,8 @@ from torch_utils import misc
 def load_network_pkl(f, force_fp16=False):
     data = _LegacyUnpickler(f).load()
 
+    print(type(data))
+
     # Legacy TensorFlow pickle => convert.
     if isinstance(data, tuple) and len(data) == 3 and all(isinstance(net, _TFNetworkStub) for net in data):
         tf_G, tf_D, tf_Gs = data

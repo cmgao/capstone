@@ -2,46 +2,71 @@ import torch
 import torch.nn as nn
 import yaml
 import pickle
+import math
 
 
-def load_decoder_stylegan2(config, device, dataset='FFHQ', untrained=True, ada=False, cond=False):
+def load_decoder_stylegan2_mnist():
+    path_dis = f"inversefed/genmodels/stylegan2/checkpoint/GAN_DIS_2000.pth"
+    path_gen = f"inversefed/genmodels/stylegan2/checkpoint/GAN_GEN_2000.pth"
+    path_map = f"inversefed/genmodels/stylegan2/checkpoint/GAN_MAP_2000.pth"
+    log_resolution = int(math.log2(32))
+    d_latent = 128
+    mapping_net_layers = 4
+    from .genmodels import stylegan2_mnist
+    G_synthesis = stylegan2_mnist.Network.Discriminator(log_resolution, n_features=int(32/4), max_features=int(512/4)).to('cuda')
+    G = stylegan2_mnist.Network.Generator(log_resolution, d_latent, n_features=int(32/8), max_features=int(512/8)).to('cuda')
+    G_mapping = stylegan2_mnist.Network.MappingNetwork(d_latent, mapping_net_layers).to('cuda')
     
-    if ada:
-        if cond:
-            if untrained:
-                path = f'inversefed/genmodels/stylegan2/{dataset}_untrained.pkl'
-            else:
-                path = f'inversefed/genmodels/stylegan2/{dataset}.pkl'
-        else:
-            if untrained:
-                path = f'inversefed/genmodels/stylegan2/{dataset}_uc_untrained.pkl'
-            else:
-                path = f'inversefed/genmodels/stylegan2/{dataset}_uc.pkl'
+    G_synthesis.load_state_dict(torch.load(path_dis))
+    G.load_state_dict(torch.load(path_gen))
+    G_mapping.load_state_dict(torch.load(path_map))
 
-    else:
-        if dataset.startswith('FF'):
-            path = f'inversefed/genmodels/stylegan2/Gs.pth'
-        elif dataset.startswith('I'):
-            path = f'inversefed/genmodels/stylegan2/imagenet.pth'
-        
-            
-                
-        
-    if ada:
-        from .genmodels.stylegan2_ada_pytorch import legacy
-        with open(path, 'rb') as f:
-            G = legacy.load_network_pkl(f)['G_ema']
-            # G.random_noise()
-            G_mapping = G.mapping
-            G_synthesis = G.synthesis
-    else:
-        from .genmodels import stylegan2
-        G = stylegan2.models.load(path)
-        G.random_noise()
-        G_mapping = G.G_mapping
-        G_synthesis = G.G_synthesis
+    G_synthesis.requires_grad_(True)
+    G.requires_grad_(True)
+    G_mapping.requires_grad_(True)
 
+    return G, G_mapping, G_synthesis
+
+def load_decoder_stylegan2(config, device, dataset='FFHQ', untrained=True, ada=True, cond=False):
     
+    # if ada:
+    #     if cond:
+    #         if untrained:
+    #             path = f'inversefed/genmodels/stylegan2/{dataset}_untrained.pkl'
+    #         else:
+    #             path = f'inversefed/genmodels/stylegan2/{dataset}.pkl'
+    #     else:
+            # if untrained:
+            #     path = f'inversefed/genmodels/stylegan2/{dataset}_uc_untrained.pkl'
+            # else:
+            #     path = f'inversefed/genmodels/stylegan2/{dataset}_uc.pkl'
+    
+    # else:
+    #     if dataset.startswith("FF"):
+    #         path = f"inversefed/genmodels/stylegan2/Gs.pth"
+    #     elif dataset.startswith("I"):
+    #         path = f"inversefed/genmodels/stylegan2_ada_pytorch/cifar10u-cifar-ada-best-fid.pkl"
+        
+        
+    # if ada:
+    from .genmodels.stylegan2_ada_pytorch import legacy
+
+    # print(path)
+
+    # with open(path, 'wb') as f:
+    #     pickle.dump(path, f)
+
+    # with open(path, 'rb') as f:
+    #     G = legacy.load_network_pkl(f)['G_ema']
+    #     # G.random_noise()
+    #     G_mapping = G.mapping
+    #     G_synthesis = G.synthesis
+    # # else:
+    from .genmodels import stylegan2
+    G = stylegan2.models.load(path)
+    G.random_noise()
+    G_mapping = G.G_mapping
+    G_synthesis = G.G_synthesis
 
     
     G.requires_grad_(True)
@@ -57,7 +82,6 @@ def load_decoder_stylegan2(config, device, dataset='FFHQ', untrained=True, ada=F
     G_mapping.requires_grad_(False)
     G_synthesis.requires_grad_(False)
 
-        
 
     return G, G_mapping, G_synthesis
 

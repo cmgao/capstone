@@ -1,16 +1,17 @@
 """Repeatable code parts concerning data loading."""
-
-
 import torch
 import torchvision
 import torchvision.transforms as transforms
 
 import os
 
+import medmnist
+from medmnist import INFO, Evaluator
+
 from ..consts import *
 
 from .data import _build_bsds_sr, _build_bsds_dn
-from .loss import Classification, PSNR
+from .loss import Classification, PSNR, Class_Binary
 from .datasets import FFHQFolder
 
 resize_dict = {
@@ -38,6 +39,9 @@ def construct_dataloaders(dataset, defs, data_path='~/data', shuffle=True, norma
         loss_fn = Classification()
     elif dataset == 'MNIST':
         trainset, validset = _build_mnist(path, defs.augmentations, normalize)
+        loss_fn = Classification()
+    elif dataset == 'MedMNIST':
+        trainset, validset = _build_med_mnist(path, defs.augmentations, normalize)
         loss_fn = Classification()
     elif dataset == 'MNIST_GRAY':
         trainset, validset = _build_mnist_gray(path, defs.augmentations, normalize)
@@ -135,6 +139,63 @@ def _build_cifar100(data_path, augmentations=True, normalize=True):
     return trainset, validset
 
 
+def _build_med_mnist(data_path, augmentations=True, normalize=True):
+    """Define MedMNIST with everything considered."""
+    download = True
+    data_flag = 'breastmnist'
+    NUM_EPOCHS = 3
+    BATCH_SIZE = 128
+    lr = 0.001
+
+    info = INFO[data_flag]
+    task = info['task']
+    n_channels = info['n_channels']
+    n_classes = len(info['label'])
+    DataClass = getattr(medmnist, info['python_class'])
+    # medmnist_mean = [0.5]
+    # medmnist_std = [0.5]
+
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Resize(32),
+        transforms.CenterCrop(32),
+        transforms.Normalize(mean=[.5], std=[.5])
+    ])
+    # Load data
+    trainset = DataClass(split='train', transform=transform, download=download)
+    validset = DataClass(split='test', transform=transform, download=download) ## test has 156 
+
+    if medmnist_mean is None:
+        cc = torch.cat([trainset[i][0].reshape(-1) for i in range(len(trainset))], dim=0)
+        data_mean = (torch.mean(cc, dim=0).item(),)
+        data_std = (torch.std(cc, dim=0).item(),)
+    else:
+        data_mean, data_std = medmnist_mean, medmnist_std
+
+    if augmentations:
+        transform_train = transforms.Compose([
+            transforms.RandomCrop(28, padding=4),
+            transforms.RandomHorizontalFlip(),
+            transform])
+        trainset.transform = transform_train
+    else:
+        trainset.transform = transform
+    validset.transform = transform
+    
+    # encapsulate data into dataloader form
+    # train_loader = data.DataLoader(dataset=train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+    # train_loader_at_eval = data.DataLoader(dataset=train_dataset, batch_size=2*BATCH_SIZE, shuffle=False)
+    # test_loader = data.DataLoader(dataset=test_dataset, batch_size=2*BATCH_SIZE, shuffle=False)
+
+    # if mnist_mean is None:
+    #     cc = torch.cat([trainset[i][0].reshape(-1) for i in range(len(trainset))], dim=0)
+    #     data_mean = (torch.mean(cc, dim=0).item(),)
+    #     data_std = (torch.std(cc, dim=0).item(),)
+    # else:
+    #     data_mean, data_std = mnist_mean, mnist_std
+
+    return trainset, validset
+
 def _build_mnist(data_path, augmentations=True, normalize=True):
     """Define MNIST with everything considered."""
     # Load data
@@ -150,6 +211,7 @@ def _build_mnist(data_path, augmentations=True, normalize=True):
 
     # Organize preprocessing
     transform = transforms.Compose([
+        transforms.Pad(2),
         transforms.ToTensor(),
         transforms.Normalize(data_mean, data_std) if normalize else transforms.Lambda(lambda x: x)])
     if augmentations:
@@ -164,36 +226,36 @@ def _build_mnist(data_path, augmentations=True, normalize=True):
 
     return trainset, validset
 
-def _build_mnist_gray(data_path, augmentations=True, normalize=True):
-    """Define MNIST with everything considered."""
-    # Load data
-    trainset = torchvision.datasets.MNIST(root=data_path, train=True, download=True, transform=transforms.ToTensor())
-    validset = torchvision.datasets.MNIST(root=data_path, train=False, download=True, transform=transforms.ToTensor())
+# def _build_mnist_gray(data_path, augmentations=True, normalize=True):
+#     """Define MNIST with everything considered."""
+#     # Load data
+#     trainset = torchvision.datasets.MNIST(root=data_path, train=True, download=True, transform=transforms.ToTensor())
+#     validset = torchvision.datasets.MNIST(root=data_path, train=False, download=True, transform=transforms.ToTensor())
 
-    if mnist_mean is None:
-        cc = torch.cat([trainset[i][0].reshape(-1) for i in range(len(trainset))], dim=0)
-        data_mean = (torch.mean(cc, dim=0).item(),)
-        data_std = (torch.std(cc, dim=0).item(),)
-    else:
-        data_mean, data_std = mnist_mean, mnist_std
+#     if mnist_mean is None:
+#         cc = torch.cat([trainset[i][0].reshape(-1) for i in range(len(trainset))], dim=0)
+#         data_mean = (torch.mean(cc, dim=0).item(),)
+#         data_std = (torch.std(cc, dim=0).item(),)
+#     else:
+#         data_mean, data_std = mnist_mean, mnist_std
 
-    # Organize preprocessing
-    transform = transforms.Compose([
-        transforms.Grayscale(num_output_channels=1),
-        transforms.ToTensor(),
-        transforms.Normalize(data_mean, data_std) if normalize else transforms.Lambda(lambda x: x)])
-    if augmentations:
-        transform_train = transforms.Compose([
-            transforms.Grayscale(num_output_channels=1),
-            transforms.RandomCrop(28, padding=4),
-            transforms.RandomHorizontalFlip(),
-            transform])
-        trainset.transform = transform_train
-    else:
-        trainset.transform = transform
-    validset.transform = transform
+#     # Organize preprocessing
+#     transform = transforms.Compose([
+#         transforms.Grayscale(num_output_channels=1),
+#         transforms.ToTensor(),
+#         transforms.Normalize(data_mean, data_std) if normalize else transforms.Lambda(lambda x: x)])
+#     if augmentations:
+#         transform_train = transforms.Compose([
+#             transforms.Grayscale(num_output_channels=1),
+#             transforms.RandomCrop(28, padding=4),
+#             transforms.RandomHorizontalFlip(),
+#             transform])
+#         trainset.transform = transform_train
+#     else:
+#         trainset.transform = transform
+#     validset.transform = transform
 
-    return trainset, validset
+#     return trainset, validset
 
 
 def _build_imagenet(data_path, augmentations=True, normalize=True, dataset='I128'):
@@ -227,27 +289,27 @@ def _build_imagenet(data_path, augmentations=True, normalize=True, dataset='I128
     return trainset, validset
 
 
-def _build_FFHQ(data_path, augmentations=True, normalize=True, size=32):
-    """Define ImageNet with everything considered."""
-    # Load data
-    data_mean, data_std = cifar10_mean, cifar10_std
+# def _build_FFHQ(data_path, augmentations=True, normalize=True, size=32):
+#     """Define ImageNet with everything considered."""
+#     # Load data
+#     data_mean, data_std = cifar10_mean, cifar10_std
     
-    # Organize preprocessing
-    transform = transforms.Compose([
-        transforms.Resize(size),
-        transforms.CenterCrop(size),
-        transforms.ToTensor(),
-        transforms.Normalize(data_mean, data_std) if normalize else transforms.Lambda(lambda x : x)])
+#     # Organize preprocessing
+#     transform = transforms.Compose([
+#         transforms.Resize(size),
+#         transforms.CenterCrop(size),
+#         transforms.ToTensor(),
+#         transforms.Normalize(data_mean, data_std) if normalize else transforms.Lambda(lambda x : x)])
     
-    full_set = FFHQFolder(root=data_path, transform=transform)
+#     full_set = FFHQFolder(root=data_path, transform=transform)
 
-    trainset = torch.utils.data.Subset(full_set, range(10000))
-    validset = torch.utils.data.Subset(full_set, range(10000, len(full_set)))
+#     trainset = torch.utils.data.Subset(full_set, range(10000))
+#     validset = torch.utils.data.Subset(full_set, range(10000, len(full_set)))
 
-    trainset.transform = transform
-    validset.transform = transform
+#     trainset.transform = transform
+#     validset.transform = transform
 
-    return trainset, validset
+#     return trainset, validset
 
 
 def _build_permuted_Imagenet(data_path, augmentations=True, normalize=True):

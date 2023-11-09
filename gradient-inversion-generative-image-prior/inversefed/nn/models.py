@@ -45,9 +45,9 @@ def construct_model(model, num_classes=10, seed=None, num_channels=3, modelkey=N
             ('conv4', torch.nn.Conv2d(128, 256, 3, stride=1, padding=1)),
             ('relu3', torch.nn.LeakyReLU()),
             ('flatt', torch.nn.Flatten()),
-            ('linear0', torch.nn.Linear(12544, 12544)),
+            ('linear0', torch.nn.Linear(16384, 12544)),
             ('relu4', torch.nn.LeakyReLU()),
-            ('linear1', torch.nn.Linear(12544, 10)),
+            ('linear1', torch.nn.Linear(12544, 4)),
             ('softmax', torch.nn.Softmax(dim=1))
         ]))
     elif model == 'BeyondInferringCifar':

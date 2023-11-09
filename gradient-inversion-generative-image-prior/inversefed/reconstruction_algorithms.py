@@ -128,6 +128,19 @@ class GradientReconstructor():
                 self.G_mapping.requires_grad_(False)
                 self.G_synthesis.requires_grad_(True)
                 self.G_synthesis.random_noise()
+            elif self.config["generative_model"] == "stylegan2_mnist":
+                self.G, self.G_mapping, self.G_synthesis = G, G.G_mapping, G.G_synthesis
+                if self.num_gpus > 1:
+                    self.G, self.G_mapping, self.G_synthesis = (
+                        G,
+                        nn.DataParallel(self.G_mapping),
+                        nn.DataParallel(self.G_synthesis),
+                    )
+                self.G_mapping.to(self.device)
+                self.G_synthesis.to(self.device)
+
+                self.G_mapping.requiresgrad(False)
+                self.G_synthesis.requiresgrad(True)
             elif self.config['generative_model'].startswith('stylegan2-ada'):
                 self.G, self.G_mapping, self.G_synthesis = G, G.mapping, G.synthesis
                 if self.num_gpus > 1:
@@ -153,12 +166,18 @@ class GradientReconstructor():
                 self.G_synthesis.requires_grad_(True)
                 self.G_mapping.eval()
                 self.G_synthesis.eval()
-            # elif self.config['generative_model'] == 'stylegan2-ada' or self.config['generative_model'] == 'stylegan2-ada-z':
-                # if config['untrained']:
-                #     G = porting.load_decoder_stylegan2_untrained(config, self.device, dataset='C10')
-                # else:
-                # G = porting.load_decoder_stylegan2_ada(self.config, self.device, dataset=self.config['gen_dataset'])
-                # self.G = G
+            elif self.config["generative_model"] == "stylegan2_mnist":
+                (
+                    self.G,
+                    self.G_mapping,
+                    self.G_synthesis,
+                ) = porting.load_decoder_stylegan2_mnist()
+                self.G_mapping.to(self.device)
+                self.G_synthesis.to(self.device)
+                self.G_mapping.requires_grad_(False)
+                self.G_synthesis.requires_grad_(True)
+                self.G_mapping.eval()
+                self.G_synthesis.eval()
             elif self.config['generative_model'] in ['DCGAN']:
                 G = porting.load_decoder_dcgan(self.config, self.device)
                 G = G.requires_grad_(True)
@@ -186,8 +205,13 @@ class GradientReconstructor():
             dummy_z = torch.randn(num_images, 512).to(self.device)
             dummy_z = G.mapping(dummy_z, None, truncation_psi=0.5, truncation_cutoff=8)
             dummy_z = dummy_z.detach().requires_grad_(True)
+        elif generative_model_name == "stylegan2_mnist":
+            dummy_z= torch.randn(num_images, 128).to(self.device)
+            w = self.G_mapping(dummy_z)
+            dummy_z = w[None, :, :].expand(4, -1, -1)
+            dummy_z = dummy_z.detach().requires_grad_(True)
         elif generative_model_name == 'stylegan2':
-            dummy_z = torch.randn(num_images, 512).to(self.device)
+            dummy_z = torch.randn(num_images, 512).to(  self.device)
             if self.config['gen_dataset'].startswith('I'):
                 num_latent_layers = 16
             else:
@@ -200,10 +224,13 @@ class GradientReconstructor():
 
 
     def gen_dummy_data(self, G, generative_model_name, dummy_z):
+        # import pudb; pudb.set_trace()
         running_device = dummy_z.device
         if generative_model_name.startswith('stylegan2-ada'):
             # @click.option('--noise-mode', help='Noise mode', type=click.Choice(['const', 'random', 'none']), default='const', show_default=True)
             dummy_data = G(dummy_z, noise_mode='random')
+        elif generative_model_name in ['stylegan2_mnist']:
+            dummy_data = G(dummy_z)
         elif generative_model_name.startswith('stylegan2'):
             dummy_data = G(dummy_z)
             if self.config['gen_dataset'].startswith('I'):
@@ -342,7 +369,9 @@ class GradientReconstructor():
                     else:
                         self.dummy_z = None
                     # print(x_trial)
-                    closure = self._gradient_closure(optimizer[trial], _x[trial], input_data, labels, losses)
+                    
+                    closure = self._gradient_closure(optimizer[trial], _x[trial].clone(), input_data, labels, losses)
+                    import pudb; pudb.set_trace()
                     rec_loss = optimizer[trial].step(closure)
                     if self.config['lr_decay']:
                         scheduler[trial].step()
@@ -525,6 +554,7 @@ class GradientReconstructor():
 
                         # print(x_trial)
                         closure = self._gradient_closure(optimizer[trial], _x[trial], input_data, labels, losses)
+                        # import pudb; pudb.set_trace()
                         rec_loss = optimizer[trial].step(closure)
                         if self.config['lr_decay']:
                             scheduler[trial].step()
@@ -700,6 +730,7 @@ class GradientReconstructor():
                 end_idx = start_idx + batch_size
                 batch_input = x_trial[start_idx:end_idx]
                 batch_label = label[start_idx:end_idx]
+                #import pudb; pudb.set_trace()
                 loss = self.loss_fn(self.model(batch_input), batch_label)
                 gradient = torch.autograd.grad(loss, self.model.parameters(), create_graph=True)
                 rec_loss = reconstruction_costs([gradient], input_gradient[i],
@@ -773,8 +804,9 @@ class FedAvgReconstructor(GradientReconstructor):
         self.batch_size = batch_size
 
     def _gradient_closure(self, optimizer, x_trial, input_gradient, label, losses):
-
+        import pudb; pudb.set_trace()
         def closure():
+            import pudb; pudb.set_trace()
             num_images = label.shape[0]
             num_gradients = len(input_gradient)
             batch_size = num_images // num_gradients
@@ -783,6 +815,7 @@ class FedAvgReconstructor(GradientReconstructor):
             total_loss = 0
             optimizer.zero_grad()
             self.model.zero_grad()
+            import pudb; pudb.set_trace()
             for i in range(num_batch):
                 start_idx = i * batch_size
                 end_idx = start_idx + batch_size
